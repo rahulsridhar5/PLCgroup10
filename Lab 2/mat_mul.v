@@ -87,32 +87,32 @@ module mat_mul #
     
     // Matrix A BRAM
     always @ (posedge s00_axi_aclk) begin 
-        if (!busy) // TODO: write-enable signal; when should we write to the matrix A? refer to the AXI-Stream Slave protocol and the control flags.
+        if (s00_axis_tready == !busy && sel == 0) // TODO: write-enable signal; when should we write to the matrix A? refer to the AXI-Stream Slave protocol and the control flags.
             mem_A [addr_stream_in] <= s00_axis_tdata;
-        if (m00_axis_tvalid == 1) // TODO: read-enable signal; when should we read from the matrix A? refer to the control flags.
+        if (!item_done && sel == 0) // TODO: read-enable signal; when should we read from the matrix A? refer to the control flags.
             mat_A <= mem_A [addr_A];
     end
     
     // Matrix B BRAM
     always @ (posedge s00_axi_aclk) begin
-        if (!busy) // TODO: write-enable signal; when should we write to the matrix B? refer to the AXI-Stream Slave protocol and the control flags.
+        if (s00_axis_tready == !busy && sel == 1) // TODO: write-enable signal; when should we write to the matrix B? refer to the AXI-Stream Slave protocol and the control flags.
             mem_B [addr_stream_in] <= s00_axis_tdata;
-        if (m00_axis_tvalid == 1) // TODO: read-enable signal; when should we read from the matrix B? refer to the control flags.
+        if (!item_done && sel == 1) // TODO: read-enable signal; when should we read from the matrix B? refer to the control flags.
             mat_B <= mem_B [addr_B];
     end
     
     // Stream-Out Data via AXI-Stream Master    
     assign m00_axis_tstrb = 4'hf;   // always f; byte-enable signal;
-    assign m00_axis_tdata = ;       // TODO: where do the stream-out data (result) come from?
-    assign m00_axis_tlast = matrix_done && last_transfer;       // TODO: when should we set the signal for the last stream-out? refer to the control flags;
-    assign m00_axis_tvalid = ;      // TODO: when are the stream-out data valid? refer to the control flags;
+    assign m00_axis_tdata = mat_R ;       // TODO: where do the stream-out data (result) come from? <Check In case of error>
+    assign m00_axis_tlast = last_transfer;       // TODO: when should we set the signal for the last stream-out? refer to the control flags;
+    assign m00_axis_tvalid = transfer;      // TODO: when are the stream-out data valid? refer to the control flags;
     
     // Stream-Out Address: generates the next stream-out address
     always @ (posedge s00_axi_aclk) begin
-        if (!s00_axi_aresetn || ) // TODO: when should we reset the stream-out address? refer to the control flags;
+        if (!s00_axi_aresetn || busy ) // TODO: when should we reset the stream-out address? refer to the control flags;
             addr_stream_out <= 0;
-        else if () // TODO: When should the address change? refer to the AXI-Stream Master protocol and the control flags.
-            addr_stream_out <= ; // TODO: what should the next address be?
+        else if(item_done) // TODO: When should the address change? refer to the AXI-Stream Master protocol and the control flags.
+            addr_stream_out <= addr_stream_out + 1 ; // TODO: what should the next address be?
     end
     
     // Start the transfer of the results to the PS
@@ -120,14 +120,14 @@ module mat_mul #
         if (!s00_axi_aresetn)
             start_transfer <= 0;
         else
-            start_transfer <= ; // TODO: refer to the control signals; this signal shall be asserted for one clock cycle.
+            start_transfer <= m00_axis_tvalid==1 && s00_axis_tready==1; // TODO: refer to the control signals; this signal shall be asserted for one clock cycle.
     end
     
     // Accelerator is busy transferring the results back to the PS
     always @ (posedge s00_axi_aclk) begin
-        if (!s00_axi_aresetn || ) // TODO: when to reset? refer to the control signals.
+        if (!s00_axi_aresetn || !m00_axis_tvalid || !s00_axis_tready) // TODO: when to reset? refer to the control signals.
             transfer <= 0;
-        else if () // TODO: refer to the control signals; this signal shall remain asserted while transferring the results.
+        else if (m00_axis_tvalid && s00_axis_tready) // TODO: refer to the control signals; this signal shall remain asserted while transferring the results.
             transfer <= 1;
     end
     
@@ -160,7 +160,7 @@ module mat_mul #
         if (!s00_axi_aresetn)
             item_done <= 0;
         else
-            item_done <= ; // TODO: this signal should be asserted when computing the last partial value in a row and column; refer to the address counters.
+            item_done <= tmp_cnt == DIM-1 && (row_cnt <= DIM - 1 || col_cnt <= DIM - 1) ? 1 : 0; // TODO: this signal should be asserted when computing the last partial value in a row and column; refer to the address counters.
     end
     
     // The whole result matrix is ready
@@ -168,14 +168,14 @@ module mat_mul #
         if (!s00_axi_aresetn)
             matrix_done <= 0;
         else
-            matrix_done <= ; // TODO: this signal should be asserted when computing the last partial value in the last row and column; refer to the address counters.
+            matrix_done <= tmp_cnt == DIM-1 && (row_cnt == DIM - 1 && col_cnt == DIM - 1) ? 1 : 0; // TODO: this signal should be asserted when computing the last partial value in the last row and column; refer to the address counters.
     end
     
     // Temporary counter for the inner-most loop when computing the partial (intermediate) values
     always @ (posedge s00_axi_aclk) begin
         if (!s00_axi_aresetn || tmp_cnt == DIM -1) // TODO: when to reset? refer to the control flags.
             tmp_cnt <= 0;
-        else if (item_done) // TODO: when to increment the inner-most loop? refer to the control flags.
+        else if (mac_enable) // TODO: when to increment the inner-most loop? refer to the control flags.
             tmp_cnt <= tmp_cnt + 1;
     end
     
@@ -183,7 +183,7 @@ module mat_mul #
     always @ (posedge s00_axi_aclk) begin
         if (!s00_axi_aresetn || col_cnt == DIM - 1) // TODO: when to reset? refer to the control flags.
             col_cnt <= 0;
-        else if (tmp_cnt == DIM - 1) // TODO: when to increment? refer to the (multiplication) loop order.
+        else if (item_done) // TODO: when to increment? refer to the (multiplication) loop order.
             col_cnt <= col_cnt + 1;
     end
     
@@ -202,7 +202,7 @@ module mat_mul #
     always @ (posedge s00_axi_aclk) begin
         if (!s00_axi_aresetn || start)
             addr_R <= 0;
-        else if () // TODO: when to increment the address used to write to the result matrix? refer to the control flags. 
+        else if (item_done) // TODO: when to increment the address used to write to the result matrix? refer to the control flags. 
             addr_R <= (DIM * row_cnt) + col_cnt; // TODO: what should the next address be?
     end
         
@@ -211,10 +211,10 @@ module mat_mul #
 
     // [multiply-and-]Accumulator (partial sum)
     always @ (posedge s00_axi_aclk) begin
-       if (!s00_axi_aresetn || ) // TODO: when to reset the partial sum? refer to the control flags (inner-most loop)
+       if (!s00_axi_aresetn || item_done) // TODO: when to reset the partial sum? refer to the control flags (inner-most loop)
            mac <= 0;
        else if (mac_enable)
-           mac <= ; // TODO: what is the partial sum?
+           mac <= mad; // TODO: what is the partial sum?<Not too sure>
     end
     
     // MAC-Enable
