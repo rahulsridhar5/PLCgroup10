@@ -19,6 +19,14 @@ module ReqKeyPad(input [3:0] key,
                  input pressed,
                  input clk);
 
+/*
+ * last4pc: This register is used to store the contents of the last4 in the previous cycle
+ *          so that it can be compared with the contents of the last4 in the next cycle in
+ *          case no key is pressed. Used while realizing Requirement 6
+ * keypc: This register is assigned the value of the pressed key from the previous 
+ *        cycle. Used while realizing Requirement 5. 
+ */ 
+
    wire [15:0] last4;
    KeyPad keypad(last4, key, pressed, clk);
    reg [15:0] last4pc;
@@ -29,11 +37,11 @@ module ReqKeyPad(input [3:0] key,
     keypc <= key;
   end 
 
-  assume property (key >= 0 && key < 10);  //E1
+  assume property (key >= 0 && key < 10);                //E1
 
-  assert property (0 <= last4 && last4 < 10000); //R4    
-  assert property (pressed |=> (last4 % 10) == keypc);
-  assert property (!pressed |=> last4pc == last4); //R6
+  assert property (0 <= last4 && last4 < 10000);         //R4    
+  assert property (pressed |=> (last4 % 10) == keypc);   //R5
+  assert property (!pressed |=> last4pc == last4);       //R6
    // Add requirements R4, R5, R6, and assumption E1 here
 endmodule
 
@@ -75,29 +83,50 @@ module ReqControl(input pressed,
                   input set_code,
                   input clk);
 
+/*
+ * isetc_o: This register is used as a flag to indicate whether set_code has not been true
+ *          since the last time the code was changed. Used while realizing Requirement 9.
+ * pcpressed: This register is used to store the value of the pressed input from the 
+ *            previous cycle. Used while realizing Requirement 8.
+ * init: This register is a flag that determines whether a code was set with the set_code
+ *       input or not. Used while realizing Requirement 7. 
+ */ 
+
    reg pcpressed;
    reg init;
    wire code_matches;
+   reg isetc_o; 
+   reg [15:0] storecode;
    
    Control control(code_matches, pressed, last4, set_code, clk);
 
-   initial
+   initial begin
+    storecode = 0;
     init = 0;
+    isetc_o = 0;
+   end
+   
 
    always @(posedge clk) begin
 
-    if(set_code == 1) 
+    if(set_code == 1) begin
+      storecode = last4;
       init = 1;
+      isetc_o = 1; 
+    end
+    else if(code_matches)
+      isetc_o = 0;
     
     if(pressed)
-      pcpressed <= pressed;
+      pcpressed <= pressed; 
     end
 
    // Add requirements R7, R8, R9, and assumption E2 here
-  assume property (last4 >= 0 && last4 < 10000);   // E2
+  assume property (last4 >= 0 && last4 < 10000);                                                 // E2
 
   assert property ((init && code_matches) || (!init && !code_matches) || (init && !code_matches));//R7
-  assert property (code_matches |-> pcpressed); //R8
+  assert property (code_matches |-> pcpressed);                                                   //R8
+  assert property ((init && !isetc_o && last4 == storecode) |=> code_matches);                    //R9
 
 
 endmodule
@@ -143,14 +172,41 @@ module ReqLock(input [3:0] key,
                input set_code,
                input clk);
 
+/*
+ * flag: This register is used as a flag to indicate if the door remains locked if the door is not unlocked
+ *        and the key is not pressed.
+ * count: This register is used to count cycles to check if the door locks after 10 cycles if no key pressed 
+ .        and the door is unlocked. */ 
+
+
    wire unlocked;
+   reg flag;
+   reg [3:0] count;
+
+   initial begin
+      flag = unlocked;
+      count = 0;
+  end
+    
    Lock lock(unlocked, key, pressed, set_code, clk);
 
+   always @(posedge clk) begin
+    if(unlocked && !pressed)
+      count = count + 1;
+    else
+      count = 0;
+   end
+
    // Add requirements R1, R2, and assumption E1 here
+   assume property (key >= 0 && key < 10);                  //E1
+                                                               
+   assert property ((!unlocked && !pressed) |=> !flag);     //R1
+   assert property ((count == 9 && !pressed)|=> unlocked);  //R2
 
    // Bonus requirement:
    // After setting the code to 1234,
    // entering 1234 again will unlock the door
+
    assert property (key == 1 && pressed |=>
                     key == 2 && pressed |=>
                     key == 3 && pressed |=>
