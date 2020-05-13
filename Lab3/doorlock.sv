@@ -185,11 +185,9 @@ module ReqLock(input [3:0] key,
 
 
    wire unlocked;
-   reg flag;
    reg [3:0] count;
 
    initial begin
-      flag = unlocked;
       count = 0;
   end
     
@@ -205,7 +203,7 @@ module ReqLock(input [3:0] key,
    // Add requirements R1, R2, and assumption E1 here
    assume property (key >= 0 && key < 10);                  //E1
                                                                
-   assert property ((!unlocked && !pressed) |=> !flag);     //R1
+   assert property ((!unlocked && !pressed) |=> (!unlocked && !pressed) |=> !unlocked);     //R1
    assert property ((count == 9 && !pressed && unlocked)|=> ##1 !unlocked);  //R2
 
    // Bonus requirement:
