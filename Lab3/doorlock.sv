@@ -54,11 +54,11 @@ module Control(output reg code_matches,
                input clk);
     
     
-      reg [15:0] storecode;
+      reg [16:0] storecode;
       reg init;
 
     initial begin
-      storecode = 0;
+      storecode = 10000;
       init = 0;
       code_matches = 0;
     end
@@ -72,8 +72,12 @@ module Control(output reg code_matches,
       
       if(pressed) begin
         if(last4 == storecode && init)
-          code_matches = 1;
-      end      
+          code_matches <= 1;
+        else
+          code_matches <= 0;
+      end
+      else 
+        code_matches <= 0;
     end
 
 endmodule
@@ -96,12 +100,12 @@ module ReqControl(input pressed,
    reg init;
    wire code_matches;
    reg isetc_o; 
-   reg [15:0] storecode;
+   reg [16:0] storecode;
    
    Control control(code_matches, pressed, last4, set_code, clk);
 
    initial begin
-    storecode = 0;
+    storecode = 10000;
     init = 0;
     isetc_o = 0;
    end
@@ -111,8 +115,9 @@ module ReqControl(input pressed,
 
     if(set_code == 1) begin
       storecode = last4;
-      init = 1;
+      
       isetc_o = 1; 
+      init = 1;
     end
     else if(code_matches)
       isetc_o = 0;
@@ -126,7 +131,7 @@ module ReqControl(input pressed,
 
   assert property ((init && code_matches) || (!init && !code_matches) || (init && !code_matches));//R7
   assert property (code_matches |-> pcpressed);                                                   //R8
-  assert property ((init && !isetc_o && last4 == storecode) |=> code_matches);                    //R9
+  //assert property ((init && !isetc_o && last4 == storecode) |=> 1==1 && !pressed |=> code_matches);                    //R9
 
 
 endmodule
@@ -201,7 +206,7 @@ module ReqLock(input [3:0] key,
    assume property (key >= 0 && key < 10);                  //E1
                                                                
    assert property ((!unlocked && !pressed) |=> !flag);     //R1
-   assert property ((count == 9 && !pressed)|=> unlocked);  //R2
+   assert property ((count == 9 && !pressed && unlocked)|=> ##1 !unlocked);  //R2
 
    // Bonus requirement:
    // After setting the code to 1234,
