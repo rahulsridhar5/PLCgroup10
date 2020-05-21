@@ -1,13 +1,14 @@
+
 #include <stdio.h>
 #include <math.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <complex.h>
 
 
 #undef I
 #define j _Complex_I
 
-#define N 10
+#define N 8
 
 double complex arr[N];
 
@@ -22,19 +23,21 @@ void populate(){
     printf("Initialized Array\n");
 }
 
-int oddoreven(int n){
-    
+int oddoreven(int n)
+{
     return n%2==0;
-
 }
 
-void cooley_tukey(double complex *arr, int len){
+void cooley_tukey(double complex *arr, int len)
+{
     int odd = 0, even = 0, n[len], half, factor;
     double complex oddarr[len/2], evenarr[len/2];
 
-    if(len>2){
-       
-        for(int i=0; i<len; i++){
+    if(len>2)
+    {
+
+        for(int i=0; i<len; i++)
+        {
             if(!oddoreven(i)){
                 oddarr[odd++] = arr[i];
             }
@@ -46,12 +49,13 @@ void cooley_tukey(double complex *arr, int len){
         cooley_tukey(evenarr,len/2);
 
     }
-    else{
-        oddarr[0]=arr[0];
-        evenarr[0]=arr[1];
+    else
+    {
+        oddarr[0]=arr[1];
+        evenarr[0]=arr[0];
     }
 
-    
+
     half = len/2;
 
     double complex t;
@@ -65,7 +69,7 @@ void cooley_tukey(double complex *arr, int len){
 void main(){
     populate();
     cooley_tukey(arr,N);
-     
+
     for (int i = 0; i < N; i++) {
         printf(" %lf + %lfi \n", creal(arr[i]), cimag(arr[i]));
     }
